@@ -1,0 +1,325 @@
+.data
+    quantidade:     .word 15                # Quantidade máxima de valores
+    valores:        .space 60               # Espaço para armazenar até 15 valores (4 bytes cada)
+    classificacao:  .space 60               # Vetor para armazenar a classificação de cada valor
+    resultado_final: .space 60              # Vetor para armazenar os valores ordenados
+    quebra_linha:   .asciiz "\n"            # String para quebra de linha
+    prompt_tamanho: .asciiz "Quantos valores deseja inserir (máximo 15)? "  # Prompt para o tamanho
+    prompt_valor:   .asciiz "Digite o valor: "                              # Prompt para cada valor
+    msg_media:      .asciiz "Media: "                                      # Mensagem para a média
+    msg_moda:       .asciiz "Moda: "                                       # Mensagem para a moda
+    msg_mediana:    .asciiz "Mediana: "                                    # Mensagem para a mediana
+    msg_sem_moda:   .asciiz "Nao ha moda\n"                                # Mensagem para quando não há moda
+	#TESTES FEITO EM SALA
+	#6 valores      16,22,24,89,60,89
+	#13 valores TESTANDO MODA  15,18,19,22,45,8,3,4,19,57,22,22,13
+	#5 valores SEM MODA  2,3,78,98,74
+	#Site utilizado para conferir valores https://miniwebtool.com/br/mean-median-mode-calculator/
+.text
+.globl main
+
+main:
+    # Solicita ao usuário quantos valores deseja inserir
+    li $v0, 4
+    la $a0, prompt_tamanho
+    syscall
+
+    # Lê o número de valores que o usuário deseja inserir
+    li $v0, 5
+    syscall
+    move $s0, $v0                          # $s0 = número de valores a serem inseridos
+
+    # Verifica se o número de valores é válido (1 <= n <= 15)
+    li $t0, 1
+    blt $s0, $t0, fim                      # Se n < 1, termina o programa
+    li $t0, 15
+    bgt $s0, $t0, fim                      # Se n > 15, termina o programa
+
+    # Inicializa para o vetor de valores
+    la $s1, valores                        # $s1 = endereço base do vetor "valores"
+    li $s2, 0                              # $s2 = índice do vetor
+
+ler_valores:
+    bge $s2, $s0, calcular_classificacao   # Se todos os valores foram lidos, vá para calcular_classificacao
+
+    # Solicita ao usuário o valor
+    li $v0, 4
+    la $a0, prompt_valor
+    syscall
+
+    # Lê o valor
+    li $v0, 5
+    syscall
+
+    # Armazena o valor no vetor "valores"
+    sll $t0, $s2, 2                        # $t0 = índice * 4 (offset)
+    add $t1, $s1, $t0                      # $t1 = endereço de valores[indice]
+    sw $v0, 0($t1)                         # Armazena o valor no vetor
+
+    addi $s2, $s2, 1                       # Incrementa o índice
+    j ler_valores                          # Repete o loop
+
+calcular_classificacao:
+    # Inicializa os ponteiros para os vetores
+    la $s1, valores                        # $s1 = endereço base do vetor "valores"
+    la $s2, classificacao                  # $s2 = endereço base do vetor "classificacao"
+    li $t0, 0                              # $t0 = índice do vetor
+
+loop_classificacao:
+    bge $t0, $s0, ordenar_resultados       # Se todos os valores foram classificados, vá para ordenar_resultados
+
+    li $t1, 0                              # $t1 = contador de classificação
+    la $t2, valores                        # $t2 = endereço base do vetor "valores"
+    li $t3, 0                              # $t3 = índice para comparação
+
+loop_comparacao_classificacao:
+    bge $t3, $s0, fim_comparacao_classificacao  # Se todas as comparações foram feitas, vá para fim_comparacao_classificacao
+
+    # Carrega valores[indice_atual]
+    sll $t4, $t0, 2                        # $t4 = índice * 4 (offset)
+    add $t5, $s1, $t4                      # $t5 = endereço de valores[indice_atual]
+    lw $t6, 0($t5)                         # $t6 = valores[indice_atual]
+
+    # Carrega valores[comparacao]
+    sll $t4, $t3, 2                        # $t4 = índice * 4 (offset)
+    add $t5, $t2, $t4                      # $t5 = endereço de valores[comparacao]
+    lw $t7, 0($t5)                         # $t7 = valores[comparacao]
+
+    # Compara valores[comparacao] < valores[indice_atual]
+    blt $t7, $t6, incrementar_classificacao  # Se valores[comparacao] < valores[indice_atual], incrementa a classificação
+
+proximo_comparacao_classificacao:
+    addi $t3, $t3, 1                       # Incrementa o índice de comparação
+    j loop_comparacao_classificacao         # Repete o loop
+
+incrementar_classificacao:
+    addi $t1, $t1, 1                       # Incrementa a classificação
+    j proximo_comparacao_classificacao      # Volta para o loop de comparação
+
+fim_comparacao_classificacao:
+    # Armazena a classificação no vetor "classificacao"
+    sll $t4, $t0, 2                        # $t4 = índice * 4 (offset)
+    add $t5, $s2, $t4                      # $t5 = endereço de classificacao[indice]
+    sw $t1, 0($t5)                         # Armazena a classificação
+
+    addi $t0, $t0, 1                       # Incrementa o índice
+    j loop_classificacao                   # Repete o loop
+
+ordenar_resultados:
+    # Inicializa os ponteiros para os vetores
+    la $s1, valores                        # $s1 = endereço base do vetor "valores"
+    la $s2, classificacao                  # $s2 = endereço base do vetor "classificacao"
+    la $t0, resultado_final                # $t0 = endereço base do vetor "resultado_final"
+    li $t1, 0                              # $t1 = índice do vetor
+
+loop_ordenacao_resultados:
+    bge $t1, $s0, calcular_estatisticas    # Se todos os valores foram ordenados, vá para calcular_estatisticas
+
+    # Carrega classificacao[indice]
+    sll $t2, $t1, 2                        # $t2 = índice * 4 (offset)
+    add $t3, $s2, $t2                      # $t3 = endereço de classificacao[indice]
+    lw $t4, 0($t3)                         # $t4 = classificacao[indice]
+
+    # Carrega valores[indice]
+    sll $t2, $t1, 2                        # $t2 = índice * 4 (offset)
+    add $t3, $s1, $t2                      # $t3 = endereço de valores[indice]
+    lw $t5, 0($t3)                         # $t5 = valores[indice]
+
+    # Armazena o valor no vetor "resultado_final" na posição correta
+    sll $t6, $t4, 2                        # $t6 = classificacao[indice] * 4 (offset)
+    add $t7, $t0, $t6                      # $t7 = endereço de resultado_final[classificacao[indice]]
+    sw $t5, 0($t7)                         # Armazena o valor
+
+    addi $t1, $t1, 1                       # Incrementa o índice
+    j loop_ordenacao_resultados            # Repete o loop
+
+calcular_estatisticas:
+    # Calcula a média (em decimal)
+    la $t0, valores                        # $t0 = endereço base do vetor "valores"
+    li $t1, 0                              # $t1 = soma dos valores (inteiro)
+    li $t2, 0                              # $t2 = índice do vetor
+
+loop_soma:
+    bge $t2, $s0, calcular_media           # Se todos os valores foram somados, vá para calcular_media
+
+    # Carrega valores[indice]
+    sll $t3, $t2, 2                        # $t3 = índice * 4 (offset)
+    add $t4, $t0, $t3                      # $t4 = endereço de valores[indice]
+    lw $t5, 0($t4)                         # $t5 = valores[indice]
+
+    add $t1, $t1, $t5                      # Soma o valor ao total
+    addi $t2, $t2, 1                       # Incrementa o índice
+    j loop_soma                            # Repete o loop
+
+calcular_media:
+    # Converte a soma para ponto flutuante
+    mtc1 $t1, $f0                          # Move a soma (inteiro) para $f0
+    cvt.s.w $f0, $f0                       # Converte para ponto flutuante
+
+    # Converte o número de valores para ponto flutuante
+    mtc1 $s0, $f1                          # Move o número de valores para $f1
+    cvt.s.w $f1, $f1                       # Converte para ponto flutuante
+
+    # Divide a soma pelo número de valores
+    div.s $f12, $f0, $f1                   # $f12 = média (ponto flutuante)
+
+    # Exibe a média
+    li $v0, 4
+    la $a0, msg_media
+    syscall
+
+    li $v0, 2                              # Código para imprimir float
+    syscall
+
+    li $v0, 4
+    la $a0, quebra_linha
+    syscall
+
+    # Calcula a moda
+    la $t0, valores                        # $t0 = endereço base do vetor "valores"
+    li $t1, 0                              # $t1 = frequência máxima
+    li $t2, 0                              # $t2 = moda
+    li $t3, 0                              # $t3 = índice do vetor
+
+loop_moda:
+    bge $t3, $s0, calcular_mediana         # Se todos os valores foram verificados, vá para calcular_mediana
+
+    # Carrega valores[indice]
+    sll $t4, $t3, 2                        # $t4 = índice * 4 (offset)
+    add $t5, $t0, $t4                      # $t5 = endereço de valores[indice]
+    lw $t6, 0($t5)                         # $t6 = valores[indice]
+
+    # Conta a frequência do valor atual
+    li $t7, 0                              # $t7 = contador de frequência
+    li $t8, 0                              # $t8 = índice para comparação
+
+loop_frequencia:
+    bge $t8, $s0, verifica_moda            # Se todas as comparações foram feitas, vá para verifica_moda
+
+    # Carrega valores[comparacao]
+    sll $t9, $t8, 2                        # $t9 = índice * 4 (offset)
+    add $t4, $t0, $t9                      # $t4 = endereço de valores[comparacao]
+    lw $t5, 0($t4)                         # $t5 = valores[comparacao]
+
+    # Compara valores[comparacao] == valores[indice]
+    bne $t5, $t6, proximo_frequencia       # Se valores[comparacao] != valores[indice], vá para proximo_frequencia
+
+    addi $t7, $t7, 1                       # Incrementa a frequência
+
+proximo_frequencia:
+    addi $t8, $t8, 1                       # Incrementa o índice de comparação
+    j loop_frequencia                      # Repete o loop
+
+verifica_moda:
+    # Verifica se a frequência atual é maior que a frequência máxima
+    ble $t7, $t1, proximo_moda             # Se frequência <= frequência máxima, vá para proximo_moda
+
+    move $t1, $t7                          # Atualiza a frequência máxima
+    move $t2, $t6                          # Atualiza a moda
+
+proximo_moda:
+    addi $t3, $t3, 1                       # Incrementa o índice
+    j loop_moda                            # Repete o loop
+
+calcular_mediana:
+    # Exibe a moda
+    li $v0, 4
+    la $a0, msg_moda
+    syscall
+
+    # Verifica se a frequência máxima é maior que 1
+    li $t9, 1
+    bgt $t1, $t9, exibir_moda              # Se frequência máxima > 1, exibe a moda
+
+    # Se não há moda, exibe a mensagem "Nao ha moda"
+    li $v0, 4
+    la $a0, msg_sem_moda
+    syscall
+
+    j calcular_mediana_fim
+
+exibir_moda:
+    # Exibe a moda
+    li $v0, 1
+    move $a0, $t2
+    syscall
+
+calcular_mediana_fim:
+    li $v0, 4
+    la $a0, quebra_linha
+    syscall
+
+    # Calcula a mediana
+    la $t0, resultado_final                # $t0 = endereço base do vetor "resultado_final"
+    li $t1, 2                              # $t1 = 2 (para divisão)
+    div $s0, $t1                           # Divide o número de valores por 2
+    mflo $t2                               # $t2 = índice do valor central
+    mfhi $t3                               # $t3 = resto da divisão
+
+    # Verifica se o número de valores é par ou ímpar
+    beqz $t3, mediana_par                  # Se o resto for 0, o número de valores é par
+
+    # Mediana para número ímpar de valores
+    sll $t4, $t2, 2                        # $t4 = índice * 4 (offset)
+    add $t5, $t0, $t4                      # $t5 = endereço de resultado_final[indice]
+    lw $t6, 0($t5)                         # $t6 = resultado_final[indice]
+
+    # Converte o valor da mediana para ponto flutuante
+    mtc1 $t6, $f0                          # Move o valor da mediana (inteiro) para $f0
+    cvt.s.w $f0, $f0                       # Converte para ponto flutuante
+
+    # Exibe a mediana
+    li $v0, 4
+    la $a0, msg_mediana
+    syscall
+
+    li $v0, 2                              # Código para imprimir float
+    mov.s $f12, $f0                        # Move o valor da mediana para $f12
+    syscall
+
+    li $v0, 4
+    la $a0, quebra_linha
+    syscall
+
+    j fim
+
+mediana_par:
+    # Mediana para número par de valores
+    sll $t4, $t2, 2                        # $t4 = índice * 4 (offset)
+    add $t5, $t0, $t4                      # $t5 = endereço de resultado_final[indice]
+    lw $t6, 0($t5)                         # $t6 = resultado_final[indice]
+
+    addi $t7, $t2, -1                      # $t7 = índice do valor anterior
+    sll $t8, $t7, 2                        # $t8 = índice * 4 (offset)
+    add $t9, $t0, $t8                      # $t9 = endereço de resultado_final[indice_anterior]
+    lw $t7, 0($t9)                         # $t7 = resultado_final[indice_anterior]
+
+    # Soma os dois valores centrais
+    add $t6, $t6, $t7                      # $t6 = soma dos dois valores centrais
+
+    # Converte a soma para ponto flutuante
+    mtc1 $t6, $f0                          # Move a soma (inteiro) para $f0
+    cvt.s.w $f0, $f0                       # Converte para ponto flutuante
+
+    # Divide a soma por 2 para obter a mediana
+    li $t0, 2                              # Carrega o valor 2 em um registrador inteiro
+    mtc1 $t0, $f1                          # Move o valor 2 para o registrador de ponto flutuante $f1
+    cvt.s.w $f1, $f1                       # Converte o valor inteiro para ponto flutuante
+    div.s $f12, $f0, $f1                   # $f12 = mediana (ponto flutuante)
+
+    # Exibe a mediana
+    li $v0, 4
+    la $a0, msg_mediana
+    syscall
+
+    li $v0, 2                              # Código para imprimir float
+    syscall
+
+    li $v0, 4
+    la $a0, quebra_linha
+    syscall
+
+fim:
+    # Termina o programa
+    li $v0, 10
+    syscall
